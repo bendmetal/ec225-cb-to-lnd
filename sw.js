@@ -1,7 +1,7 @@
 // EC225 Category B Max Takeoff and Landing - Service Worker
 // Caches the app for full offline use after first load
 
-const CACHE_NAME = 'ec225-cb-to-lnd-v1';
+const CACHE_NAME = 'ec225-cb-to-lnd-v2';
 const FILES_TO_CACHE = [
   './',
   './index.html'

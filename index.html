@@ -89,6 +89,13 @@
     white-space: nowrap;
   }
   .weight-value.capped { color: #fbbf24; }
+  .weight-value-kg {
+    font-size: 20px; font-weight: 500;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    color: #6b7280;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
   .weight-unit {
     font-size: 11px; color: #6b7280;
     text-transform: uppercase;
@@ -179,6 +186,10 @@
       <div class="weight-block">
         <div class="weight-value" id="lb-value">—</div>
         <div class="weight-unit">lb</div>
+      </div>
+      <div class="weight-block">
+        <div class="weight-value-kg" id="kg-value">—</div>
+        <div class="weight-unit">kg</div>
       </div>
     </div>
   </div>
@@ -277,17 +288,26 @@
     return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
 
+  const KG_TO_LB = 2.20462;
+  function toKg(lb) {
+    return Math.round(lb / KG_TO_LB / 10) * 10;
+  }
+
   function compute() {
     const paEl = document.getElementById('pa');
     const oatEl = document.getElementById('oat');
     const pa = parseFloat(paEl.value);
     const oat = parseFloat(oatEl.value);
-    const lbEl = document.getElementById('lb-value');
+    const weightsEl = document.getElementById('weights');
     const warnEl = document.getElementById('warning-box');
 
+    const blocks = function(lbText, lbClass, kgText) {
+      return '<div class="weight-block"><div class="weight-value ' + lbClass + '" id="lb-value">' + lbText + '</div><div class="weight-unit">lb</div></div>' +
+        '<div class="weight-block"><div class="weight-value-kg" id="kg-value">' + kgText + '</div><div class="weight-unit">kg</div></div>';
+    };
+
     if (isNaN(pa) || isNaN(oat)) {
-      lbEl.textContent = '—';
-      lbEl.className = 'weight-value';
+      weightsEl.innerHTML = blocks('—', '', '—');
       warnEl.innerHTML = '';
       return;
     }
@@ -295,11 +315,9 @@
     const result = lookup(pa, oat);
 
     if (result.value === null) {
-      lbEl.textContent = result.note;
-      lbEl.className = 'error-value';
+      weightsEl.innerHTML = '<div class="error-value">' + result.note + '</div>';
     } else {
-      lbEl.textContent = fmt(result.value);
-      lbEl.className = 'weight-value' + (result.capped ? ' capped' : '');
+      weightsEl.innerHTML = blocks(fmt(result.value), result.capped ? 'capped' : '', fmt(toKg(result.value)));
     }
 
     const warnings = [];
