@@ -129,6 +129,19 @@
     padding: 8px 0;
   }
 
+  .handoff-wrap { margin-top: 14px; }
+  .handoff-btn {
+    width: 100%; padding: 12px 14px; border-radius: 8px; cursor: pointer;
+    background: rgba(247,120,186,0.10); border: 1px solid rgba(247,120,186,0.40);
+    color: #f778ba; font-size: 13px; font-weight: 600; font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .handoff-btn:active { background: rgba(247,120,186,0.25); }
+  .handoff-done {
+    display: none; margin-top: 8px; font-size: 11px; line-height: 1.5;
+  }
+  .handoff-done.show { display: block; }
+
   .warning {
     margin-top: 14px; padding: 12px 14px;
     background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3);
@@ -215,6 +228,11 @@
   </div>
 
   <div id="warning-box"></div>
+
+  <div class="handoff-wrap" id="handoff-wrap" style="display:none;">
+    <button class="handoff-btn" onclick="sendToFuelPlanner()">Use this weight in the Fuel Planner</button>
+    <div class="handoff-done" id="handoff-done"></div>
+  </div>
 
   <div class="info">
     <strong>Source:</strong> RFM Section 2.2.A1, Figure 4b-1 (MAKILA 2A1), rev 11-50 &mdash; Category B · Both Engines at Takeoff Rating · MPAI Bullets Closed · No P3 Air Bleed · Configuration with 9 or less passenger seats &mdash; Figures 4b-2 and 4b-3 cover other seating configurations and are NOT included in this tool; confirm your configuration before use. Bilinear interpolation between chart points. Weight results capped at MTOW 24,251 lb.
@@ -324,6 +342,56 @@
     return Math.round(lb / KG_TO_LB / 10) * 10;
   }
 
+  // ===================================================================
+  // Cross-app handoff store
+  // -------------------------------------------------------------------
+  // All 15 tools are served from one origin (bendmetal.github.io), so
+  // localStorage is SHARED between them -- the folder path does not
+  // partition it. That lets a Cat A/B result travel to a fuel planner
+  // without any server.
+  // Rules that keep this safe for flight planning:
+  //   * the receiver never auto-fills; it offers, the pilot accepts
+  //   * the conditions the number came from travel with it
+  //   * anything older than MAX_AGE_MIN is not offered at all
+  // Wrapped in try/catch throughout: localStorage throws in some private
+  // browsing contexts, and a storage failure must never break a calculator.
+  // ===================================================================
+  const EC225_HANDOFF_KEY = 'ec225.handoff.maxgwt';
+  const EC225_HANDOFF_MAX_AGE_MIN = 360;   // 6 hours
+
+  function ec225SaveHandoff(payload){
+    try {
+      payload.savedAt = Date.now();
+      localStorage.setItem(EC225_HANDOFF_KEY, JSON.stringify(payload));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Remembers the most recent valid result so the button can send it.
+  let lastGoodResult = null;
+
+  function showHandoff(){
+    const w = document.getElementById('handoff-wrap');
+    if (w) w.style.display = '';
+  }
+  function hideHandoff(){
+    const w = document.getElementById('handoff-wrap');
+    const d = document.getElementById('handoff-done');
+    if (w) w.style.display = 'none';
+    if (d) d.classList.remove('show');
+  }
+
+  function sendToFuelPlanner(){
+    const doneEl = document.getElementById('handoff-done');
+    if (!lastGoodResult){ return; }
+    const ok = ec225SaveHandoff(lastGoodResult);
+    doneEl.innerHTML = ok
+      ? 'Saved. Open the Mission Fuel Planner or Route Fuel Planner &mdash; it will offer this weight for the CAT A/B Max Allowable GWT field.'
+      : 'Could not save on this device (storage unavailable). Note the number and enter it by hand.';
+    doneEl.style.color = ok ? '#4ade80' : '#fbbf24';
+    doneEl.classList.add('show');
+  }
+
   function compute() {
     const paEl = document.getElementById('pa');
     const oatEl = document.getElementById('oat');
@@ -340,15 +408,28 @@
     if (isNaN(pa) || isNaN(oat)) {
       weightsEl.innerHTML = blocks('—', '', '—');
       warnEl.innerHTML = '';
+      lastGoodResult = null; hideHandoff();
       return;
     }
+
+    const doneEl0 = document.getElementById('handoff-done');
+    if (doneEl0) doneEl0.classList.remove('show');
 
     const result = lookup(pa, oat);
 
     if (result.value === null) {
       weightsEl.innerHTML = '<div class="error-value">' + result.note + '</div>';
+      lastGoodResult = null; hideHandoff();
     } else {
       weightsEl.innerHTML = blocks(fmt(result.value), result.capped ? 'capped' : '', fmt(toKg(result.value)));
+      lastGoodResult = {
+        kg: toKg(result.value),
+        lb: result.value,
+        category: 'B',
+        source: 'Cat B Takeoff / Landing',
+        conditions: fmt(pa) + ' ft / ' + (oat >= 0 ? '+' : '') + oat + ' \u00b0C'
+      };
+      showHandoff();
     }
 
     const warnings = [];
